@@ -1,6 +1,7 @@
-"""Tests for gsi_handler.parse_gsi_payload."""
+"""Tests for gsi_handler — both parse_draft_state and parse_game_state."""
 import pytest
-from gsi_handler import parse_gsi_payload
+from gsi_handler import parse_draft_state as parse_gsi_payload, parse_game_state, _parse_inventory
+from models import InventoryItem
 
 
 def _make_payload(game_state="DOTA_GAMERULES_STATE_HERO_SELECTION",
@@ -141,3 +142,125 @@ class TestInDraft:
     def test_time_remaining_parsed(self):
         state = parse_gsi_payload(_make_payload(draft=_basic_draft(activeteam_time_remaining=27.5)))
         assert state.time_remaining == pytest.approx(27.5)
+
+
+# ── parse_game_state ──────────────────────────────────────────────────────────
+
+def _make_game_payload(
+    game_state="DOTA_GAMERULES_STATE_GAME_IN_PROGRESS",
+    hero_name="npc_dota_hero_antimage",
+    hero_level=11,
+    gold=2500,
+    game_time=900,
+    items=None,
+):
+    return {
+        "map":    {"game_state": game_state, "game_time": game_time},
+        "hero":   {"name": hero_name, "level": hero_level},
+        "player": {"gold": gold, "net_worth": gold + 3000},
+        "items":  items or {},
+    }
+
+
+class TestParseGameStateInactive:
+    def test_hero_selection_returns_none(self):
+        assert parse_game_state(_make_game_payload("DOTA_GAMERULES_STATE_HERO_SELECTION")) is None
+
+    def test_post_game_returns_none(self):
+        assert parse_game_state(_make_game_payload("DOTA_GAMERULES_STATE_POST_GAME")) is None
+
+    def test_empty_payload_returns_none(self):
+        assert parse_game_state({}) is None
+
+    def test_missing_hero_name_returns_none(self):
+        payload = _make_game_payload()
+        payload["hero"] = {}
+        assert parse_game_state(payload) is None
+
+
+class TestParseGameStateActive:
+    def test_game_in_progress_returns_active(self):
+        state = parse_game_state(_make_game_payload())
+        assert state is not None
+        assert state.active is True
+
+    def test_pre_game_returns_active(self):
+        state = parse_game_state(_make_game_payload("DOTA_GAMERULES_STATE_PRE_GAME"))
+        assert state is not None
+        assert state.active is True
+
+    def test_hero_name_prefix_stripped(self):
+        state = parse_game_state(_make_game_payload(hero_name="npc_dota_hero_antimage"))
+        assert state.hero_name == "antimage"
+
+    def test_hero_level_parsed(self):
+        state = parse_game_state(_make_game_payload(hero_level=18))
+        assert state.hero_level == 18
+
+    def test_game_time_parsed(self):
+        state = parse_game_state(_make_game_payload(game_time=1800))
+        assert state.game_time == 1800
+
+    def test_gold_from_direct_key(self):
+        state = parse_game_state(_make_game_payload(gold=3000))
+        assert state.gold == 3000
+
+    def test_gold_from_split_keys_when_direct_missing(self):
+        payload = _make_game_payload()
+        del payload["player"]["gold"]
+        payload["player"]["gold_reliable"]   = 800
+        payload["player"]["gold_unreliable"] = 400
+        state = parse_game_state(payload)
+        assert state.gold == 1200
+
+    def test_ally_and_enemy_names_empty_by_default(self):
+        """main.py injects these after parsing; parser leaves them empty."""
+        state = parse_game_state(_make_game_payload())
+        assert state.ally_hero_names == []
+        assert state.enemy_hero_names == []
+
+
+# ── _parse_inventory ──────────────────────────────────────────────────────────
+
+class TestParseInventory:
+    def test_empty_slots_excluded(self):
+        items = {"slot0": {"name": "item_empty"}, "slot1": {"name": "item_empty"}}
+        assert _parse_inventory(items) == []
+
+    def test_missing_slots_excluded(self):
+        assert _parse_inventory({}) == []
+
+    def test_prefix_stripped(self):
+        items = {"slot0": {"name": "item_power_treads"}}
+        result = _parse_inventory(items)
+        assert len(result) == 1
+        assert result[0].item_name == "power_treads"
+        assert result[0].slot == "slot0"
+
+    def test_multiple_slots_all_parsed(self):
+        items = {
+            "slot0": {"name": "item_blink"},
+            "slot1": {"name": "item_black_king_bar"},
+            "slot2": {"name": "item_empty"},
+        }
+        result = _parse_inventory(items)
+        names = {i.item_name for i in result}
+        assert names == {"blink", "black_king_bar"}
+
+    def test_stash_slot_included(self):
+        items = {"stash0": {"name": "item_manta_style"}}
+        result = _parse_inventory(items)
+        assert len(result) == 1
+        assert result[0].slot == "stash0"
+        assert result[0].item_name == "manta_style"
+
+    def test_neutral_slot_included(self):
+        items = {"neutral0": {"name": "item_possessed_mask"}}
+        result = _parse_inventory(items)
+        assert len(result) == 1
+        assert result[0].slot == "neutral0"
+
+    def test_returns_inventory_item_instances(self):
+        items = {"slot0": {"name": "item_blink"}}
+        result = _parse_inventory(items)
+        assert all(isinstance(i, InventoryItem) for i in result)

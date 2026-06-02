@@ -1,6 +1,5 @@
 """Tests for the suggestion engine."""
 import pytest
-from gsi_handler import parse_gsi_payload
 from models import DraftState, TeamDraft, HeroSlot
 
 

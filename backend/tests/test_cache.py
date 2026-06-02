@@ -1,7 +1,10 @@
-"""Tests for the cache layer (heroes, matchups, synergies, meta)."""
+"""Tests for the cache layer (heroes, matchups, synergies, meta, items)."""
 import pytest
 from datetime import datetime, timedelta
-from tests.conftest import ALL_HEROES, MATCHUPS, SYNERGIES, HERO_AM, HERO_RUBICK
+from tests.conftest import (
+    ALL_HEROES, MATCHUPS, SYNERGIES, HERO_AM, HERO_RUBICK,
+    ALL_ITEMS, AM_ITEM_POPULARITY,
+)
 
 
 class TestHeroes:
@@ -138,3 +141,145 @@ class TestMeta:
         import cache
         ages = cache.get_data_ages()
         assert ages["has_synergy_data"] is True
+
+
+class TestItemConstants:
+    def test_upsert_and_retrieve(self, tmp_db):
+        import cache
+        cache.upsert_items(ALL_ITEMS)
+        items = cache.get_items_dict()
+        assert "blink" in items
+        assert items["blink"]["display_name"] == "Blink Dagger"
+        assert items["blink"]["cost"] == 2250
+
+    def test_components_deserialized_as_list(self, tmp_db):
+        import cache
+        cache.upsert_items(ALL_ITEMS)
+        items = cache.get_items_dict()
+        assert isinstance(items["black_king_bar"]["components"], list)
+        assert "ogre_axe" in items["black_king_bar"]["components"]
+
+    def test_item_with_no_components_returns_empty_list(self, tmp_db):
+        import cache
+        cache.upsert_items(ALL_ITEMS)
+        items = cache.get_items_dict()
+        assert items["blink"]["components"] == []
+
+    def test_upsert_is_idempotent(self, tmp_db):
+        import cache
+        cache.upsert_items(ALL_ITEMS)
+        cache.upsert_items(ALL_ITEMS)
+        assert len(cache.get_items_dict()) == len(ALL_ITEMS)
+
+    def test_items_need_refresh_when_empty(self, tmp_db):
+        import cache
+        assert cache.items_need_refresh() is True
+
+    def test_items_not_stale_after_upsert(self, tmp_db):
+        import cache
+        cache.upsert_items(ALL_ITEMS)
+        assert cache.items_need_refresh() is False
+
+    def test_items_stale_after_threshold(self, tmp_db):
+        import cache
+        cache.upsert_items(ALL_ITEMS)
+        old_ts = (datetime.utcnow() - timedelta(days=8)).isoformat()
+        cache.set_meta("items_updated", old_ts)
+        assert cache.items_need_refresh() is True
+
+
+class TestHeroItems:
+    def test_upsert_and_retrieve(self, item_db):
+        import cache
+        cache.upsert_hero_items(1, AM_ITEM_POPULARITY)
+        rows = cache.get_hero_items(1)
+        assert len(rows) > 0
+
+    def test_phase_keys_normalised(self, item_db):
+        import cache
+        cache.upsert_hero_items(1, AM_ITEM_POPULARITY)
+        rows = cache.get_hero_items(1)
+        phases = {r["phase"] for r in rows}
+        assert phases <= {"start", "early", "mid", "late"}
+
+    def test_item_name_prefix_stripped(self, item_db):
+        import cache
+        cache.upsert_hero_items(1, AM_ITEM_POPULARITY)
+        rows = cache.get_hero_items(1)
+        names = {r["item_name"] for r in rows}
+        # Stored without "item_" prefix
+        assert "power_treads" in names
+        assert "blink" in names
+        assert not any(n.startswith("item_") for n in names)
+
+    def test_games_and_wins_stored_correctly(self, item_db):
+        import cache
+        cache.upsert_hero_items(1, AM_ITEM_POPULARITY)
+        rows = cache.get_hero_items(1)
+        blink = next(r for r in rows if r["item_name"] == "blink")
+        assert blink["games"] == 25000
+        assert blink["wins"] == 14000
+        assert blink["phase"] == "mid"
+
+    def test_zero_games_rows_excluded(self, item_db):
+        import cache
+        popularity = {"mid_game_items": {"item_blink": {"games": 0, "wins": 0}}}
+        cache.upsert_hero_items(1, popularity)
+        rows = cache.get_hero_items(1)
+        assert all(r["games"] > 0 for r in rows)
+
+    def test_unknown_phase_key_silently_ignored(self, item_db):
+        import cache
+        popularity = {"ultra_late_game_items": {"item_blink": {"games": 1000, "wins": 600}}}
+        cache.upsert_hero_items(1, popularity)
+        rows = cache.get_hero_items(1)
+        # Unknown phase key produces no rows
+        assert rows == []
+
+    def test_hero_items_need_refresh_when_empty(self, item_db):
+        import cache
+        assert cache.hero_items_need_refresh(1) is True
+
+    def test_hero_items_not_stale_after_upsert(self, item_db):
+        import cache
+        cache.upsert_hero_items(1, AM_ITEM_POPULARITY)
+        assert cache.hero_items_need_refresh(1) is False
+
+    def test_hero_items_stale_after_threshold(self, item_db):
+        import cache
+        cache.upsert_hero_items(1, AM_ITEM_POPULARITY)
+        old_ts = (datetime.utcnow() - timedelta(days=2)).isoformat()
+        cache.set_meta("hero_items_updated_1", old_ts)
+        assert cache.hero_items_need_refresh(1) is True
+
+    def test_has_hero_item_data_false_when_empty(self, item_db):
+        import cache
+        assert cache.has_hero_item_data(1) is False
+
+    def test_has_hero_item_data_true_after_upsert(self, item_db):
+        import cache
+        cache.upsert_hero_items(1, AM_ITEM_POPULARITY)
+        assert cache.has_hero_item_data(1) is True
+
+
+class TestGetHeroIdByName:
+    def test_known_hero_returns_id(self, populated_db):
+        import cache
+        assert cache.get_hero_id_by_name("antimage") == 1
+
+    def test_known_hero_rubick(self, populated_db):
+        import cache
+        assert cache.get_hero_id_by_name("rubick") == 86
+
+    def test_unknown_hero_returns_none(self, populated_db):
+        import cache
+        assert cache.get_hero_id_by_name("nonexistent_hero") is None
+
+    def test_empty_db_returns_none(self, tmp_db):
+        import cache
+        assert cache.get_hero_id_by_name("antimage") is None
+
+    def test_full_prefixed_name_not_found(self, populated_db):
+        """Callers must pass the bare name, not the npc_dota_hero_ prefixed version."""
+        import cache
+        assert cache.get_hero_id_by_name("npc_dota_hero_antimage") is None

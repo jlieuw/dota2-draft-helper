@@ -5,6 +5,7 @@ Run this once before launching the app.
 Auto-detects the Steam installation path from the Windows registry.
 Falls back to the default path if registry lookup fails.
 """
+import re
 import sys
 import os
 from pathlib import Path
@@ -19,12 +20,18 @@ GSI_CONTENT = '''"drafthelper Configuration"
     "heartbeat"     "30.0"
     "data"
     {
-        "draft"     "1"
-        "map"       "1"
-        "hero"      "1"
+        "draft"      "1"
+        "map"        "1"
+        "hero"       "1"
+        "items"      "1"
+        "player"     "1"
+        "abilities"  "1"
     }
 }
 '''
+
+# Keys that must be present in an existing config for it to be considered up-to-date.
+_REQUIRED_GSI_KEYS = {"items", "player", "abilities"}
 
 
 def find_steam_path():
@@ -56,11 +63,32 @@ def get_gsi_dir() -> Path:
     return Path(r"C:\Program Files (x86)\Steam\steamapps\common\dota 2 beta\game\dota\cfg\gamestate_integration")
 
 
-def main():
-    gsi_dir = get_gsi_dir()
-    gsi_file = gsi_dir / GSI_FILENAME
+def _config_needs_update(gsi_file: Path) -> bool:
+    """
+    Returns True if the existing config is missing any required GSI data key set to "1".
+    Parses active key-value pairs rather than doing a substring search so that
+    commented-out or disabled keys (e.g. // "items" "0") are not counted as present.
+    """
+    try:
+        content = gsi_file.read_text()
+        # Extract all unquoted key->value pairs of the form: "key"  "value"
+        # Lines starting with // are Valve's cfg comment syntax — skip them.
+        active_keys: set[str] = set()
+        for line in content.splitlines():
+            stripped = line.strip()
+            if stripped.startswith("//"):
+                continue
+            m = re.match(r'"(\w+)"\s+"(\w+)"', stripped)
+            if m and m.group(2) == "1":
+                active_keys.add(m.group(1))
+        return bool(_REQUIRED_GSI_KEYS - active_keys)
+    except Exception:
+        return True
 
-    print(f"Installing GSI config to:\n  {gsi_file}\n")
+
+def main():
+    gsi_dir  = get_gsi_dir()
+    gsi_file = gsi_dir / GSI_FILENAME
 
     if not gsi_dir.parent.exists():
         print("ERROR: Dota 2 cfg directory not found.")
@@ -68,6 +96,12 @@ def main():
         print("\nMake sure Dota 2 is installed, then re-run this script.")
         sys.exit(1)
 
+    if gsi_file.exists() and not _config_needs_update(gsi_file):
+        print("✓ GSI config is already up-to-date.")
+        print(f"  {gsi_file}")
+        return
+
+    print(f"Installing GSI config to:\n  {gsi_file}\n")
     gsi_dir.mkdir(parents=True, exist_ok=True)
     gsi_file.write_text(GSI_CONTENT)
 

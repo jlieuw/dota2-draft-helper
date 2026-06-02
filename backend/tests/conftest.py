@@ -5,6 +5,7 @@ independent and fast, and never touch the real user data directory.
 """
 import sys
 import uuid
+import tempfile
 import pytest
 from pathlib import Path
 
@@ -19,7 +20,7 @@ def tmp_db(monkeypatch):
     Using /tmp explicitly to avoid SQLite locking issues on mounted NTFS paths.
     """
     import cache
-    db_file = Path("/tmp") / f"dota_test_{uuid.uuid4().hex}.db"
+    db_file = Path(tempfile.gettempdir()) / f"dota_test_{uuid.uuid4().hex}.db"
     monkeypatch.setattr(cache, "DB_PATH", db_file)
     cache.init_db()
     yield db_file
@@ -84,4 +85,73 @@ def populated_db(tmp_db):
     cache.upsert_heroes(ALL_HEROES)
     cache.upsert_matchups(MATCHUPS)
     cache.upsert_synergies(SYNERGIES)
+    yield tmp_db
+
+
+# ---------------------------------------------------------------------------
+# Item test data
+# ---------------------------------------------------------------------------
+
+ITEM_BLINK = {
+    "name": "blink",
+    "display_name": "Blink Dagger",
+    "cost": 2250,
+    "components": [],
+    "image_url": "https://example.com/blink.png",
+}
+
+ITEM_BKB = {
+    "name": "black_king_bar",
+    "display_name": "Black King Bar",
+    "cost": 4050,
+    "components": ["ogre_axe", "mithril_hammer"],
+    "image_url": "https://example.com/bkb.png",
+}
+
+ITEM_TREADS = {
+    "name": "power_treads",
+    "display_name": "Power Treads",
+    "cost": 1400,
+    "components": ["boots", "gloves"],
+    "image_url": "https://example.com/treads.png",
+}
+
+ALL_ITEMS = {i["name"]: i for i in [ITEM_BLINK, ITEM_BKB, ITEM_TREADS]}
+
+# hero_id=1 (AM) item popularity data shaped like OpenDota's response
+AM_ITEM_POPULARITY = {
+    "start_game_items": {
+        "item_tango":         {"games": 50000, "wins": 25000},
+    },
+    "early_game_items": {
+        "item_power_treads":  {"games": 30000, "wins": 16500},
+    },
+    "mid_game_items": {
+        "item_blink":         {"games": 25000, "wins": 14000},
+        "item_black_king_bar": {"games": 20000, "wins": 11000},
+    },
+    "late_game_items": {
+        "item_butterfly":     {"games": 15000, "wins": 8500},
+    },
+}
+
+
+@pytest.fixture()
+def item_db(tmp_db):
+    """tmp_db with heroes and item constants loaded."""
+    import cache
+    cache.upsert_heroes(ALL_HEROES)
+    cache.upsert_items(ALL_ITEMS)
+    yield tmp_db
+
+
+@pytest.fixture()
+def full_db(tmp_db):
+    """tmp_db with all data: heroes, matchups, synergies, items, and hero item popularity."""
+    import cache
+    cache.upsert_heroes(ALL_HEROES)
+    cache.upsert_matchups(MATCHUPS)
+    cache.upsert_synergies(SYNERGIES)
+    cache.upsert_items(ALL_ITEMS)
+    cache.upsert_hero_items(1, AM_ITEM_POPULARITY)
     yield tmp_db

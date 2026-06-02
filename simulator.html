@@ -78,6 +78,117 @@
       cursor: pointer;
     }
 
+    /* ── Mode tabs ── */
+    .sim-tabs {
+      display: flex;
+      align-items: center;
+      gap: 2px;
+      padding: 6px 16px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    .sim-tab {
+      padding: 4px 14px;
+      border-radius: 4px 4px 0 0;
+      border: 1px solid transparent;
+      border-bottom: none;
+      background: transparent;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 400;
+      cursor: pointer;
+      font-family: inherit;
+      transition: all 0.12s;
+    }
+    .sim-tab.active {
+      background: var(--bg);
+      border-color: var(--border);
+      color: var(--text);
+      font-weight: 600;
+    }
+    .sim-tab-panel { display: none; flex: 1; flex-direction: column; overflow: hidden; }
+    .sim-tab-panel.active { display: flex; }
+
+    /* ── Game mode controls ── */
+    .game-controls {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      padding: 8px 16px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+      flex-wrap: wrap;
+    }
+    .ctrl-group {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+    .ctrl-label {
+      font-size: 10px;
+      font-weight: 700;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+    .ctrl-row { display: flex; align-items: center; gap: 6px; }
+    .ctrl-select {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: 12px;
+      font-family: inherit;
+      cursor: pointer;
+      min-width: 140px;
+    }
+    .ctrl-input {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: 12px;
+      font-family: inherit;
+      width: 90px;
+    }
+    .ctrl-range { width: 120px; accent-color: var(--accent); }
+    .ctrl-value { font-size: 12px; color: var(--accent); font-weight: 600; min-width: 36px; }
+
+    /* ── Inventory picker ── */
+    .inventory-section {
+      padding: 8px 16px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    .inv-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
+    .inv-slot {
+      width: 46px; height: 30px;
+      border-radius: 3px;
+      border: 1px dashed var(--border);
+      background: var(--surface2);
+      cursor: pointer;
+      overflow: hidden;
+      position: relative;
+    }
+    .inv-slot.filled { border-style: solid; border-color: var(--accent); }
+    .inv-slot img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .inv-slot .remove-x {
+      display: none; position: absolute; inset: 0;
+      background: rgba(0,0,0,0.7);
+      align-items: center; justify-content: center;
+      font-size: 12px; cursor: pointer;
+    }
+    .inv-slot.filled:hover .remove-x { display: flex; }
+
+    /* ── All Pick: hide ban slots ── */
+    body.all-pick .ban-row { display: none !important; }
+    body.all-pick .slot-group-label[data-type="ban"] { display: none !important; }
+
     /* ── Draft Board ── */
     .draft-board {
       display: grid;
@@ -292,6 +403,13 @@
   <div class="header-title">⚔️ Draft Simulator</div>
   <div class="header-actions">
     <div class="my-team-toggle">
+      <span>Game mode</span>
+      <select id="gameModeSelect" onchange="setGameMode(this.value)">
+        <option value="captains">Captain's Mode</option>
+        <option value="allpick">All Pick</option>
+      </select>
+    </div>
+    <div class="my-team-toggle">
       <span>I am</span>
       <select id="myTeamSelect" onchange="setMyTeam(this.value)">
         <option value="radiant">Radiant</option>
@@ -306,48 +424,116 @@
   </div>
 </div>
 
-<!-- Draft Board -->
-<div class="draft-board">
-  <div class="team-col">
-    <div class="team-label radiant" id="radiantLabel">Radiant <span class="you-badge">YOU</span></div>
-    <div class="slot-group-label">Picks</div>
-    <div class="slots-row" id="radiantPicks"></div>
-    <div class="slot-group-label">Bans</div>
-    <div class="slots-row" id="radiantBans"></div>
-  </div>
-  <div class="team-col">
-    <div class="team-label dire" id="direLabel">Dire</div>
-    <div class="slot-group-label">Picks</div>
-    <div class="slots-row" id="direPicks"></div>
-    <div class="slot-group-label">Bans</div>
-    <div class="slots-row" id="direBans"></div>
-  </div>
+<!-- Simulator tabs -->
+<div class="sim-tabs">
+  <button class="sim-tab active" id="tab-draft"   onclick="switchTab('draft')">Draft</button>
+  <button class="sim-tab"        id="tab-ingame"  onclick="switchTab('ingame')">In-Game Preview</button>
 </div>
 
-<!-- Mode bar -->
-<div class="mode-bar">
-  <span class="mode-label">Mode</span>
-  <button class="mode-btn" id="btn-radiant-pick" onclick="setMode('radiant-pick')">🟢 Radiant Pick</button>
-  <button class="mode-btn" id="btn-radiant-ban"  onclick="setMode('radiant-ban')">🚫 Radiant Ban</button>
-  <button class="mode-btn" id="btn-dire-pick"    onclick="setMode('dire-pick')">🔴 Dire Pick</button>
-  <button class="mode-btn" id="btn-dire-ban"     onclick="setMode('dire-ban')">🚫 Dire Ban</button>
-  <div class="search-box">
-    <select class="role-select" id="roleSelect" onchange="renderGrid()">
-      <option value="">All roles</option>
-      <option>Carry</option><option>Support</option><option>Nuker</option>
-      <option>Disabler</option><option>Durable</option><option>Escape</option>
-      <option>Pusher</option><option>Initiator</option>
-    </select>
-    <input class="search-input" id="searchInput" placeholder="Search hero…" oninput="renderGrid()" />
-  </div>
-</div>
+<!-- ══ Tab: Draft ════════════════════════════════════════════════════════════ -->
+<div class="sim-tab-panel active" id="panel-draft">
 
-<!-- Hero Grid -->
-<div class="hero-grid-wrap">
-  <div class="hero-grid" id="heroGrid">
-    <div style="color:var(--muted);padding:20px">Loading heroes…</div>
+  <!-- Draft Board -->
+  <div class="draft-board">
+    <div class="team-col">
+      <div class="team-label radiant" id="radiantLabel">Radiant <span class="you-badge">YOU</span></div>
+      <div class="slot-group-label" data-type="pick">Picks</div>
+      <div class="slots-row" id="radiantPicks"></div>
+      <div class="slot-group-label ban-row" data-type="ban">Bans</div>
+      <div class="slots-row ban-row" id="radiantBans"></div>
+    </div>
+    <div class="team-col">
+      <div class="team-label dire" id="direLabel">Dire</div>
+      <div class="slot-group-label" data-type="pick">Picks</div>
+      <div class="slots-row" id="direPicks"></div>
+      <div class="slot-group-label ban-row" data-type="ban">Bans</div>
+      <div class="slots-row ban-row" id="direBans"></div>
+    </div>
   </div>
-</div>
+
+  <!-- Mode bar -->
+  <div class="mode-bar">
+    <span class="mode-label">Mode</span>
+    <button class="mode-btn" id="btn-radiant-pick" onclick="setMode('radiant-pick')">🟢 Radiant Pick</button>
+    <button class="mode-btn" id="btn-radiant-ban"  onclick="setMode('radiant-ban')">🚫 Radiant Ban</button>
+    <button class="mode-btn" id="btn-dire-pick"    onclick="setMode('dire-pick')">🔴 Dire Pick</button>
+    <button class="mode-btn" id="btn-dire-ban"     onclick="setMode('dire-ban')">🚫 Dire Ban</button>
+    <div class="search-box">
+      <select class="role-select" id="roleSelect" onchange="renderGrid()">
+        <option value="">All roles</option>
+        <option>Carry</option><option>Support</option><option>Nuker</option>
+        <option>Disabler</option><option>Durable</option><option>Escape</option>
+        <option>Pusher</option><option>Initiator</option>
+      </select>
+      <input class="search-input" id="searchInput" placeholder="Search hero…" oninput="renderGrid()" />
+    </div>
+  </div>
+
+  <!-- Hero Grid -->
+  <div class="hero-grid-wrap">
+    <div class="hero-grid" id="heroGrid">
+      <div style="color:var(--muted);padding:20px">Loading heroes…</div>
+    </div>
+  </div>
+
+</div><!-- /panel-draft -->
+
+<!-- ══ Tab: In-Game Preview ══════════════════════════════════════════════════ -->
+<div class="sim-tab-panel" id="panel-ingame">
+
+  <!-- Game controls bar -->
+  <div class="game-controls">
+
+    <div class="ctrl-group">
+      <div class="ctrl-label">Playing as</div>
+      <select class="ctrl-select" id="playingAsSelect" onchange="postGameState()">
+        <option value="">— pick hero first —</option>
+      </select>
+    </div>
+
+    <div class="ctrl-group">
+      <div class="ctrl-label">Game time</div>
+      <div class="ctrl-row">
+        <input class="ctrl-range" id="gameTimeRange" type="range" min="0" max="4500" step="60"
+               value="600" oninput="syncGameTime(); postGameState()" />
+        <span class="ctrl-value" id="gameTimeLabel">10:00</span>
+      </div>
+    </div>
+
+    <div class="ctrl-group">
+      <div class="ctrl-label">Gold</div>
+      <input class="ctrl-input" id="goldInput" type="number" min="0" max="99999"
+             value="2000" oninput="postGameState()" />
+    </div>
+
+    <div class="ctrl-group">
+      <div class="ctrl-label">Hero level</div>
+      <input class="ctrl-input" id="levelInput" type="number" min="1" max="30"
+             value="6" style="width:60px" oninput="postGameState()" />
+    </div>
+
+  </div>
+
+  <!-- Current items (click hero grid below to add) -->
+  <div class="inventory-section">
+    <div class="ctrl-label" style="margin-bottom:4px">Current items (click the grid to add)</div>
+    <div class="inv-row" id="inventorySlots"></div>
+  </div>
+
+  <!-- Hero grid for item inventory picking -->
+  <div style="display:flex;align-items:center;gap:8px;padding:6px 16px;background:var(--surface);border-bottom:1px solid var(--border);flex-shrink:0">
+    <span style="font-size:11px;color:var(--muted);font-weight:600">Add item</span>
+    <input class="search-input" id="itemSearchInput" placeholder="Search item…"
+           oninput="renderItemGrid()" style="width:180px" />
+    <button class="btn btn-danger" style="margin-left:auto" onclick="clearInventory()">Clear items</button>
+  </div>
+  <div class="hero-grid-wrap" id="itemGridWrap">
+    <div class="hero-grid" id="itemGrid">
+      <div style="color:var(--muted);padding:20px">Loading items…</div>
+    </div>
+  </div>
+
+</div><!-- /panel-ingame -->
 
 <!-- Status bar -->
 <div class="status-bar">
@@ -361,25 +547,32 @@
 // ── State ─────────────────────────────────────────────────────────────────────
 const MAX_PICKS = 5;
 const MAX_BANS  = 7;
+const INV_SLOTS = 6;
 
 let allHeroes  = [];
+let allItems   = {};   // item_name -> metadata from /api/heroes (items come from constants)
 let myTeam     = 'radiant';
+let gameMode   = 'captains';  // 'captains' | 'allpick'
 let mode       = 'radiant-pick';
-let history    = [];   // for undo
+let history    = [];
+let activeTab  = 'draft';
 
 let draft = {
   radiant: { picks: [], bans: [] },
   dire:    { picks: [], bans: [] },
 };
 
-// hero lookup by id
+// In-game preview state
+let inventory = [];  // list of { item_name, slot }
+
 let heroById = {};
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 async function init() {
-  await loadHeroes();
+  await Promise.all([loadHeroes(), loadItems()]);
   setMode('radiant-pick');
   renderAll();
+  renderInventorySlots();
   checkBackend();
   setInterval(checkBackend, 10000);
 }
@@ -391,10 +584,27 @@ async function loadHeroes() {
     heroById   = {};
     for (const h of allHeroes) heroById[h.id] = h;
     renderGrid();
-  } catch (e) {
+    updatePlayingAsOptions();
+  } catch {
     document.getElementById('heroGrid').innerHTML =
       '<div style="color:var(--bad);padding:20px">Could not load heroes — is the backend running?</div>';
   }
+}
+
+async function loadItems() {
+  try {
+    // Item constants come from the backend's /api/status page; we fetch the hero list
+    // which carries enough info. For item data we call the constants directly.
+    const resp = await fetch('/api/items');
+    if (resp.ok) {
+      const data = await resp.json();
+      allItems = data;
+    }
+  } catch {
+    // Items endpoint may not exist yet — degrade gracefully.
+    allItems = {};
+  }
+  renderItemGrid();
 }
 
 async function checkBackend() {
@@ -408,12 +618,41 @@ async function checkBackend() {
   }
 }
 
-// ── Mode ──────────────────────────────────────────────────────────────────────
+// ── Tab switching ─────────────────────────────────────────────────────────────
+function switchTab(tab) {
+  activeTab = tab;
+  document.querySelectorAll('.sim-tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.sim-tab-panel').forEach(p => p.classList.remove('active'));
+  document.getElementById('tab-' + tab).classList.add('active');
+  document.getElementById('panel-' + tab).classList.add('active');
+  if (tab === 'ingame') {
+    updatePlayingAsOptions();
+    renderItemGrid();
+  }
+}
+
+// ── Game mode ─────────────────────────────────────────────────────────────────
+function setGameMode(m) {
+  gameMode = m;
+  if (m === 'allpick') {
+    document.body.classList.add('all-pick');
+    // Disable ban mode buttons
+    document.getElementById('btn-radiant-ban').disabled = true;
+    document.getElementById('btn-dire-ban').disabled    = true;
+    if (mode.includes('ban')) setMode('radiant-pick');
+  } else {
+    document.body.classList.remove('all-pick');
+    document.getElementById('btn-radiant-ban').disabled = false;
+    document.getElementById('btn-dire-ban').disabled    = false;
+  }
+  postGSI();
+}
+
+// ── Draft mode ────────────────────────────────────────────────────────────────
 function setMode(m) {
   mode = m;
   document.querySelectorAll('.mode-btn').forEach(b => b.className = 'mode-btn');
   document.getElementById('btn-' + m).classList.add('active-' + m);
-
   const hints = {
     'radiant-pick': '🟢 Click a hero to pick for Radiant',
     'radiant-ban':  '🚫 Click a hero to ban for Radiant',
@@ -430,6 +669,7 @@ function setMyTeam(team) {
     'Radiant' + (team === 'radiant' ? ' <span class="you-badge">YOU</span>' : '');
   document.getElementById('direLabel').innerHTML =
     'Dire' + (team === 'dire' ? ' <span class="you-badge">YOU</span>' : '');
+  updatePlayingAsOptions();
   postGSI();
 }
 
@@ -452,28 +692,20 @@ function heroUsage(heroId) {
 }
 
 function clickHero(heroId) {
-  const hero   = heroById[heroId];
+  const hero  = heroById[heroId];
   if (!hero) return;
-
   const usage = heroUsage(heroId);
-  if (usage) {
-    removeHero(heroId, usage);
-    return;
-  }
+  if (usage) { removeHero(heroId, usage); return; }
 
   const [team, action] = mode.split('-');
   const list = draft[team][action + 's'];
   const max  = action === 'pick' ? MAX_PICKS : MAX_BANS;
+  if (list.length >= max) { flashHint(`${team} ${action} slots are full!`); return; }
 
-  if (list.length >= max) {
-    flashHint(`${team} ${action} slots are full!`);
-    return;
-  }
-
-  const slot = { id: hero.id, name: hero.name };
-  list.push(slot);
+  list.push({ id: hero.id, name: hero.name });
   history.push({ team, action, heroId: hero.id });
   renderAll();
+  updatePlayingAsOptions();
   postGSI();
 }
 
@@ -487,6 +719,7 @@ function removeHero(heroId, usage) {
     list.splice(idx, 1);
     history = history.filter(e => e.heroId !== heroId);
     renderAll();
+    updatePlayingAsOptions();
     postGSI();
   }
 }
@@ -498,6 +731,7 @@ function undoLast() {
   const idx  = list.findLastIndex(h => h.id === last.heroId);
   if (idx !== -1) list.splice(idx, 1);
   renderAll();
+  updatePlayingAsOptions();
   postGSI();
 }
 
@@ -505,6 +739,7 @@ function resetDraft() {
   draft = { radiant: { picks:[], bans:[] }, dire: { picks:[], bans:[] } };
   history = [];
   renderAll();
+  updatePlayingAsOptions();
   postGSI();
 }
 
@@ -516,7 +751,7 @@ function flashHint(msg) {
   setTimeout(() => { el.style.color = 'var(--accent)'; el.textContent = prev; }, 1500);
 }
 
-// ── Render ────────────────────────────────────────────────────────────────────
+// ── Render: draft board ───────────────────────────────────────────────────────
 function imgUrl(hero) {
   const name = (hero.name || '').replace('npc_dota_hero_', '');
   return `https://cdn.cloudflare.steamstatic.com/apps/dota2/images/dota_react/heroes/${name}.png`;
@@ -525,36 +760,30 @@ function imgUrl(hero) {
 function renderSlots(containerId, slots, maxSlots, type, team) {
   const container = document.getElementById(containerId);
   container.innerHTML = '';
-
-  const isBan      = type === 'ban';
-  const isActive   = mode === `${team}-${type}`;
-  const nextIdx    = slots.length;
+  const isBan    = type === 'ban';
+  const isActive = mode === `${team}-${type}`;
 
   for (let i = 0; i < maxSlots; i++) {
     const slot = document.createElement('div');
     slot.className = 'slot' + (isBan ? ' ban-slot' : '');
-
     if (i < slots.length) {
       const hero = heroById[slots[i].id];
       slot.classList.add('filled');
       if (hero) {
         const img = document.createElement('img');
-        img.src = imgUrl(hero);
-        img.alt = hero.display_name;
+        img.src = imgUrl(hero); img.alt = hero.display_name;
         img.onerror = () => { img.style.display='none'; };
         slot.appendChild(img);
         const x = document.createElement('div');
-        x.className = 'remove-x';
-        x.textContent = '✕';
+        x.className = 'remove-x'; x.textContent = '✕';
         x.title = `Remove ${hero.display_name}`;
         x.onclick = () => removeHero(hero.id, heroUsage(hero.id));
         slot.appendChild(x);
         slot.title = hero.display_name;
       }
-    } else if (i === nextIdx && isActive) {
+    } else if (i === slots.length && isActive) {
       slot.classList.add('next-slot');
     }
-
     container.appendChild(slot);
   }
 }
@@ -567,16 +796,14 @@ function renderBoard() {
 }
 
 function renderGrid() {
-  const search  = document.getElementById('searchInput').value.toLowerCase();
-  const role    = document.getElementById('roleSelect').value;
-  const used    = usedHeroIds();
-  const grid    = document.getElementById('heroGrid');
+  const search = document.getElementById('searchInput')?.value.toLowerCase() ?? '';
+  const role   = document.getElementById('roleSelect')?.value ?? '';
+  const grid   = document.getElementById('heroGrid');
   grid.innerHTML = '';
 
   const filtered = allHeroes.filter(h => {
-    const name = (h.display_name || '').toLowerCase();
-    if (search && !name.includes(search)) return false;
-    if (role && !(h.roles || []).includes(role)) return false;
+    if (search && !(h.display_name || '').toLowerCase().includes(search)) return false;
+    if (role   && !(h.roles || []).includes(role)) return false;
     return true;
   });
 
@@ -588,24 +815,22 @@ function renderGrid() {
   for (const hero of filtered) {
     const usage  = heroUsage(hero.id);
     const isUsed = !!usage;
-
-    const card = document.createElement('div');
-    card.className = 'hero-card' + (isUsed ? ` used used-${usage === 'rp' ? 'radiant-pick' : usage === 'rb' ? 'radiant-ban' : usage === 'dp' ? 'dire-pick' : 'dire-ban'}` : '');
-    card.title = isUsed
-      ? `${hero.display_name} — click to remove`
-      : hero.display_name;
+    const card   = document.createElement('div');
+    card.className = 'hero-card' + (isUsed
+      ? ` used used-${usage === 'rp' ? 'radiant-pick' : usage === 'rb' ? 'radiant-ban' : usage === 'dp' ? 'dire-pick' : 'dire-ban'}`
+      : '');
+    card.title   = isUsed ? `${hero.display_name} — click to remove` : hero.display_name;
     card.onclick = () => clickHero(hero.id);
 
     const img = document.createElement('img');
-    img.src   = imgUrl(hero);
-    img.alt   = hero.display_name;
+    img.src = imgUrl(hero); img.alt = hero.display_name;
     img.onerror = () => { img.style.background='var(--surface2)'; };
     card.appendChild(img);
 
-    const name = document.createElement('div');
-    name.className = 'hero-card-name';
-    name.textContent = hero.display_name;
-    card.appendChild(name);
+    const nameEl = document.createElement('div');
+    nameEl.className = 'hero-card-name';
+    nameEl.textContent = hero.display_name;
+    card.appendChild(nameEl);
 
     if (usage) {
       const tag = document.createElement('div');
@@ -613,18 +838,127 @@ function renderGrid() {
       tag.textContent = usage === 'rp' ? 'R' : usage === 'rb' ? 'B' : usage === 'dp' ? 'D' : 'B';
       card.appendChild(tag);
     }
+    grid.appendChild(card);
+  }
+}
+
+function renderAll() { renderBoard(); renderGrid(); }
+
+// ── In-Game Preview ───────────────────────────────────────────────────────────
+
+function updatePlayingAsOptions() {
+  const sel = document.getElementById('playingAsSelect');
+  const prev = sel.value;
+  sel.innerHTML = '<option value="">— select your hero —</option>';
+  const myPicks = (myTeam === 'radiant' ? draft.radiant.picks : draft.dire.picks);
+  for (const h of myPicks) {
+    const hero = heroById[h.id];
+    if (!hero) continue;
+    const opt  = document.createElement('option');
+    opt.value  = hero.name.replace('npc_dota_hero_', '');
+    opt.textContent = hero.display_name;
+    sel.appendChild(opt);
+  }
+  if ([...sel.options].some(o => o.value === prev)) sel.value = prev;
+}
+
+function syncGameTime() {
+  const secs = parseInt(document.getElementById('gameTimeRange').value) || 0;
+  const m = Math.floor(secs / 60), s = secs % 60;
+  document.getElementById('gameTimeLabel').textContent = `${m}:${String(s).padStart(2, '0')}`;
+}
+
+// ── Inventory ─────────────────────────────────────────────────────────────────
+
+function renderInventorySlots() {
+  const container = document.getElementById('inventorySlots');
+  container.innerHTML = '';
+  for (let i = 0; i < INV_SLOTS; i++) {
+    const item = inventory.find(x => x.slot === i);
+    const div  = document.createElement('div');
+    div.className = 'inv-slot' + (item ? ' filled' : '');
+    div.title = item ? item.item_name.replace(/_/g, ' ') : `Slot ${i + 1}`;
+    if (item) {
+      const img = document.createElement('img');
+      img.src = `https://cdn.cloudflare.steamstatic.com/apps/dota2/images/dota_react/items/${item.item_name}.png`;
+      img.alt = item.item_name;
+      img.onerror = () => { img.style.display='none'; };
+      div.appendChild(img);
+      const x = document.createElement('div');
+      x.className = 'remove-x'; x.textContent = '✕';
+      x.onclick = () => { inventory = inventory.filter(x => x.slot !== i); renderInventorySlots(); postGameState(); };
+      div.appendChild(x);
+    }
+    container.appendChild(div);
+  }
+}
+
+function addItemToInventory(itemName) {
+  if (inventory.length >= INV_SLOTS) return;
+  const nextSlot = [...Array(INV_SLOTS).keys()].find(i => !inventory.some(x => x.slot === i));
+  if (nextSlot === undefined) return;
+  inventory.push({ slot: nextSlot, item_name: itemName });
+  renderInventorySlots();
+  postGameState();
+}
+
+function clearInventory() {
+  inventory = [];
+  renderInventorySlots();
+  postGameState();
+}
+
+function renderItemGrid() {
+  const search  = (document.getElementById('itemSearchInput')?.value ?? '').toLowerCase();
+  const grid    = document.getElementById('itemGrid');
+  if (!grid) return;
+
+  const entries = Object.entries(allItems).filter(([name, data]) => {
+    if (!data.cost || data.cost <= 0) return false;
+    if (name.includes('recipe')) return false;
+    if (!search) return true;
+    return (data.display_name || name).toLowerCase().includes(search);
+  });
+
+  if (!entries.length) {
+    grid.innerHTML = '<div style="color:var(--muted);padding:20px">' +
+      (Object.keys(allItems).length === 0 ? 'Item data not yet loaded — make sure the backend is running with item constants.' : 'No items match') +
+      '</div>';
+    return;
+  }
+
+  grid.innerHTML = '';
+  for (const [name, data] of entries.slice(0, 120)) {
+    const card = document.createElement('div');
+    card.className = 'hero-card';
+    card.title   = `${data.display_name} — ${data.cost}g`;
+    card.onclick = () => addItemToInventory(name);
+
+    const img = document.createElement('img');
+    img.src = data.image_url ||
+      `https://cdn.cloudflare.steamstatic.com/apps/dota2/images/dota_react/items/${name}.png`;
+    img.alt = data.display_name;
+    img.style.width  = '64px';
+    img.style.height = '36px';
+    img.onerror = () => { img.style.background='var(--surface2)'; };
+    card.appendChild(img);
+
+    const nameEl = document.createElement('div');
+    nameEl.className = 'hero-card-name';
+    nameEl.textContent = data.display_name || name;
+    card.appendChild(nameEl);
+
+    const costEl = document.createElement('div');
+    costEl.style.cssText = 'font-size:9px;color:var(--accent);font-weight:600;text-align:center';
+    costEl.textContent = `${data.cost}g`;
+    card.appendChild(costEl);
 
     grid.appendChild(card);
   }
 }
 
-function renderAll() {
-  renderBoard();
-  renderGrid();
-}
-
-// ── GSI Posting ───────────────────────────────────────────────────────────────
-function buildGSIPayload() {
+// ── GSI Posting: Draft ────────────────────────────────────────────────────────
+function buildDraftPayload() {
   const team2 = { home_team: myTeam === 'radiant' };
   const team3 = { home_team: myTeam === 'dire' };
 
@@ -656,27 +990,52 @@ function buildGSIPayload() {
         : 'DOTA_GAMERULES_STATE_WAIT_FOR_PLAYERS_TO_LOAD'
     },
     draft: hasPicks ? {
-      activeteam: 2,
-      activeteam_time_remaining: 30.0,
-      radiant_bonus_time: 130.0,
-      dire_bonus_time: 130.0,
-      team2,
-      team3,
+      activeteam: 2, activeteam_time_remaining: 30.0,
+      radiant_bonus_time: 130.0, dire_bonus_time: 130.0,
+      team2, team3,
     } : undefined,
   };
 }
 
 async function postGSI() {
-  const payload = buildGSIPayload();
+  try {
+    await fetch('/gsi', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(buildDraftPayload()),
+    });
+  } catch (e) { console.warn('Could not post draft to backend:', e); }
+}
+
+// ── GSI Posting: Game state ───────────────────────────────────────────────────
+async function postGameState() {
+  const heroName = document.getElementById('playingAsSelect').value;
+  if (!heroName) return;
+
+  const gameTime  = parseInt(document.getElementById('gameTimeRange').value) || 0;
+  const gold      = parseInt(document.getElementById('goldInput').value)     || 0;
+  const level     = parseInt(document.getElementById('levelInput').value)    || 1;
+
+  const itemsObj = {};
+  inventory.forEach(({ slot, item_name }) => {
+    itemsObj[`slot${slot}`] = { name: `item_${item_name}` };
+  });
+
+  const payload = {
+    provider: { name: 'Dota 2 Simulator', appid: 570 },
+    map:    { game_state: 'DOTA_GAMERULES_STATE_GAME_IN_PROGRESS', game_time: gameTime },
+    hero:   { name: `npc_dota_hero_${heroName}`, level },
+    player: { gold, gold_reliable: gold, gold_unreliable: 0, net_worth: gold + 3000 },
+    items:  itemsObj,
+  };
+
   try {
     await fetch('/gsi', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     });
-  } catch (e) {
-    console.warn('Could not post to backend:', e);
-  }
+  } catch (e) { console.warn('Could not post game state to backend:', e); }
 }
 
 // ── Boot ──────────────────────────────────────────────────────────────────────

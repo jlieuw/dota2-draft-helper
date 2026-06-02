@@ -4,6 +4,7 @@ import { DraftBoard } from './components/DraftBoard'
 import { SuggestionList } from './components/SuggestionList'
 import { StatusBar } from './components/StatusBar'
 import { MyHeroesPanel } from './components/MyHeroesPanel'
+import { InGamePanel } from './components/InGamePanel'
 
 const s = {
   app: { display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden' },
@@ -80,9 +81,10 @@ const s = {
 }
 
 const PAGES = [
-  { id: 'draft',     label: '⚔️ Draft',     external: false },
-  { id: 'my-heroes', label: '👤 My Heroes',  external: false },
-  { id: 'simulator', label: '🎮 Simulator',  external: true,  href: '/simulator' },
+  { id: 'draft',    label: '⚔️ Draft',     external: false },
+  { id: 'in-game',  label: '🎮 In-Game',   external: false },
+  { id: 'my-heroes',label: '👤 My Heroes', external: false },
+  { id: 'simulator',label: '🖥 Simulator', external: true, href: '/simulator' },
 ]
 
 function ConnDot({ ok }) {
@@ -98,6 +100,9 @@ export default function App() {
   const draft           = data?.draft || null
   const suggestions     = data?.suggestions || []
   const draftActive     = draft?.active ?? false
+  const mode            = data?.mode ?? 'idle'
+  const gameState       = data?.game_state ?? null
+  const itemSuggestions = data?.item_suggestions ?? []
   const gsiConnected    = data?.gsi_connected ?? false
   const hasPersonalData = data?.has_personal_data ?? false
   const personalSummary = data?.personal_summary ?? null
@@ -111,10 +116,11 @@ export default function App() {
       .catch(() => {})
   }, [connected])
 
-  // Auto-switch to Draft page when a game draft starts
+  // Auto-switch pages when the game phase changes
   useEffect(() => {
-    if (draftActive) setPage('draft')
-  }, [draftActive])
+    if (mode === 'game')  setPage('in-game')
+    if (mode === 'draft') setPage('draft')
+  }, [mode])
 
   // Track when personal data first loads so we can show the badge
   const personalJustLoaded = hasPersonalData && !prevPersonal.current
@@ -144,7 +150,7 @@ export default function App() {
               )
             }
             const isMyHeroes = p.id === 'my-heroes'
-            const showBadge  = isMyHeroes && personalJustLoaded
+            const isInGame   = p.id === 'in-game'
             return (
               <button
                 key={p.id}
@@ -154,10 +160,10 @@ export default function App() {
               >
                 {p.label}
                 {isMyHeroes && hasPersonalData && (
-                  <span
-                    style={s.navBadge}
-                    title="Personal hero stats loaded"
-                  />
+                  <span style={s.navBadge} title="Personal hero stats loaded" />
+                )}
+                {isInGame && mode === 'game' && (
+                  <span style={{ ...s.navBadge, background: 'var(--good)' }} title="Game in progress" />
                 )}
               </button>
             )
@@ -226,6 +232,11 @@ export default function App() {
               )}
             </div>
           )
+        )}
+
+        {/* In-Game page */}
+        {page === 'in-game' && (
+          <InGamePanel gameState={gameState} itemSuggestions={itemSuggestions} />
         )}
 
         {/* My Heroes page */}

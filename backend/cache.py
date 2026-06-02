@@ -1,6 +1,8 @@
 """
 SQLite cache for hero data, matchup statistics, synergy data, and personal stats.
 """
+from __future__ import annotations
+
 import os
 import sqlite3
 import json
@@ -37,10 +39,12 @@ def _get_db_path():
 
 
 DB_PATH = _get_db_path()
-HERO_REFRESH_DAYS     = 7
-MATCHUP_REFRESH_DAYS  = 1
-SYNERGY_REFRESH_DAYS  = 1
-POSITION_REFRESH_DAYS = 1
+HERO_REFRESH_DAYS       = 7
+MATCHUP_REFRESH_DAYS    = 1
+SYNERGY_REFRESH_DAYS    = 1
+POSITION_REFRESH_DAYS   = 1
+ITEM_REFRESH_DAYS       = 7
+HERO_ITEMS_REFRESH_DAYS = 1
 
 
 def get_conn():
@@ -99,6 +103,21 @@ def init_db():
                 match_count INTEGER NOT NULL,
                 win_count   INTEGER NOT NULL,
                 PRIMARY KEY (hero_id, position)
+            );
+            CREATE TABLE IF NOT EXISTS items (
+                name          TEXT PRIMARY KEY,
+                display_name  TEXT NOT NULL,
+                cost          INTEGER NOT NULL DEFAULT 0,
+                components    TEXT NOT NULL DEFAULT '[]',
+                image_url     TEXT NOT NULL DEFAULT ''
+            );
+            CREATE TABLE IF NOT EXISTS hero_items (
+                hero_id   INTEGER NOT NULL,
+                item_name TEXT NOT NULL,
+                phase     TEXT NOT NULL,
+                games     INTEGER NOT NULL,
+                wins      INTEGER NOT NULL,
+                PRIMARY KEY (hero_id, item_name, phase)
             );
             CREATE TABLE IF NOT EXISTS meta (
                 key     TEXT PRIMARY KEY,
@@ -565,6 +584,135 @@ def get_stratz_matchup_winrate(hero_id, enemy_id):
         except Exception:
             pass
         return 0.5
+
+
+# -- Item constants -----------------------------------------------------------
+
+def items_need_refresh() -> bool:
+    with get_conn() as conn:
+        row = conn.execute("SELECT value FROM meta WHERE key='items_updated'").fetchone()
+        if not row:
+            return True
+        return datetime.utcnow() - datetime.fromisoformat(row["value"]) > timedelta(days=ITEM_REFRESH_DAYS)
+
+
+def upsert_items(items_dict: dict):
+    """items_dict: { item_name -> {name, display_name, cost, components, image_url} }"""
+    with get_conn() as conn:
+        for name, data in items_dict.items():
+            conn.execute(
+                "INSERT OR REPLACE INTO items (name, display_name, cost, components, image_url) "
+                "VALUES (?,?,?,?,?)",
+                (
+                    name,
+                    data.get("display_name", name),
+                    data.get("cost", 0),
+                    json.dumps(data.get("components") or []),
+                    data.get("image_url", ""),
+                )
+            )
+        conn.execute(
+            "INSERT OR REPLACE INTO meta VALUES ('items_updated', ?)",
+            (datetime.utcnow().isoformat(),)
+        )
+    log.info("Cached %d item constants", len(items_dict))
+
+
+def get_items_dict() -> dict:
+    """Returns { item_name -> {name, display_name, cost, components, image_url} }."""
+    with get_conn() as conn:
+        rows = conn.execute("SELECT * FROM items").fetchall()
+    result = {}
+    for r in rows:
+        result[r["name"]] = {
+            "name":         r["name"],
+            "display_name": r["display_name"],
+            "cost":         r["cost"],
+            "components":   json.loads(r["components"] or "[]"),
+            "image_url":    r["image_url"],
+        }
+    return result
+
+
+# -- Hero item popularity (per-hero win rates by game phase) ------------------
+
+# Phase key normalisation: OpenDota response key -> stored phase label
+_PHASE_KEY_MAP = {
+    "start_game_items": "start",
+    "early_game_items": "early",
+    "mid_game_items":   "mid",
+    "late_game_items":  "late",
+}
+
+
+def hero_items_need_refresh(hero_id: int) -> bool:
+    key = f"hero_items_updated_{hero_id}"
+    val = get_meta(key)
+    if not val:
+        return True
+    return datetime.utcnow() - datetime.fromisoformat(val) > timedelta(days=HERO_ITEMS_REFRESH_DAYS)
+
+
+def upsert_hero_items(hero_id: int, popularity: dict):
+    """
+    popularity: OpenDota /heroes/{id}/itemPopularity response.
+    Stores win/game counts per item per phase.
+    Item names from OpenDota may have an "item_" prefix — it is stripped here.
+    """
+    with get_conn() as conn:
+        for api_key, phase_label in _PHASE_KEY_MAP.items():
+            phase_data = popularity.get(api_key, {})
+            for raw_name, stats in phase_data.items():
+                if not isinstance(stats, dict):
+                    continue
+                item_name = raw_name.removeprefix("item_")
+                games = stats.get("games", 0)
+                wins  = stats.get("wins", 0)
+                if games <= 0:
+                    continue
+                conn.execute(
+                    "INSERT OR REPLACE INTO hero_items (hero_id, item_name, phase, games, wins) "
+                    "VALUES (?,?,?,?,?)",
+                    (hero_id, item_name, phase_label, games, wins)
+                )
+        conn.execute(
+            "INSERT OR REPLACE INTO meta VALUES (?,?)",
+            (f"hero_items_updated_{hero_id}", datetime.utcnow().isoformat())
+        )
+    log.info("Cached item popularity for hero %d", hero_id)
+
+
+def get_hero_items(hero_id: int) -> list[dict]:
+    """Returns [{item_name, phase, games, wins}] for the given hero."""
+    with get_conn() as conn:
+        rows = conn.execute(
+            "SELECT item_name, phase, games, wins FROM hero_items WHERE hero_id=?",
+            (hero_id,)
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def has_hero_item_data(hero_id: int) -> bool:
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT COUNT(*) as c FROM hero_items WHERE hero_id=?", (hero_id,)
+        ).fetchone()
+        return row["c"] > 0
+
+
+# -- Hero name lookup ---------------------------------------------------------
+
+def get_hero_id_by_name(name: str) -> int | None:
+    """
+    Looks up a hero's ID by its internal class name (without npc_dota_hero_ prefix).
+    E.g. get_hero_id_by_name("antimage") -> 1
+    """
+    full_name = f"npc_dota_hero_{name}"
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT id FROM heroes WHERE name=?", (full_name,)
+        ).fetchone()
+        return row["id"] if row else None
 
 
 def invalidate_hero_cache():

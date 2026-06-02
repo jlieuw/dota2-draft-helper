@@ -61,6 +61,45 @@ async def fetch_all_matchups(hero_ids):
     return results
 
 
+async def fetch_item_constants() -> dict:
+    """
+    Returns a dict of item_name -> metadata for all Dota 2 items.
+    Item names use the internal format without "item_" prefix (e.g. "power_treads").
+    """
+    async with httpx.AsyncClient(timeout=20) as client:
+        resp = await client.get(f"{BASE_URL}/constants/items")
+        resp.raise_for_status()
+        raw = resp.json()
+
+    result = {}
+    for name, data in raw.items():
+        if not isinstance(data, dict):
+            continue
+        result[name] = {
+            "name":         name,
+            "display_name": data.get("dname") or name.replace("_", " ").title(),
+            "cost":         int(data.get("cost") or 0),
+            "components":   [c for c in (data.get("components") or []) if c],
+            "image_url": (
+                "https://cdn.cloudflare.steamstatic.com/apps/dota2/images/dota_react/items/"
+                + name + ".png"
+            ),
+        }
+    return result
+
+
+async def fetch_hero_item_popularity(hero_id: int) -> dict:
+    """
+    Returns item win/game counts by game phase for a hero.
+    Response shape: { "start_game_items": { item_name: {games, wins} }, ... }
+    Phases: start_game_items, early_game_items, mid_game_items, late_game_items.
+    """
+    async with httpx.AsyncClient(timeout=15) as client:
+        resp = await client.get(f"{BASE_URL}/heroes/{hero_id}/itemPopularity")
+        resp.raise_for_status()
+        return resp.json()
+
+
 async def fetch_player_heroes(account_id):
     """
     Fetches hero stats for a player from OpenDota.
