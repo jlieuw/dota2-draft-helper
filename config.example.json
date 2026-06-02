@@ -1,0 +1,19 @@
+{
+  "_comment": "Copy this file to config.json and fill in your values. All fields are optional.",
+
+  "stratz_token": "",
+  "_stratz_comment": "Free API token from https://stratz.com/api — enables real synergy + counter data. Leave blank to use OpenDota fallback.",
+
+  "steam_account_id": "",
+  "_steam_comment": "Optional. Your OpenDota account ID (Steam64 minus 76561197960265728). Find it at https://www.opendota.com — your profile URL ends with it. If you set a Stratz token, your ID is decoded from it automatically.",
+
+  "rank_bracket": "all",
+  "_rank_comment": "Filter win rate data by rank. Options: all, herald, guardian, crusader, archon, legend, ancient, divine, immortal",
+
+  "scoring_weights": {
+    "winrate": 0.25,
+    "synergy": 0.35,
+    "counter": 0.40
+  },
+  "_weights_comment": "Must sum to 1.0. Increase counter weight for matchup-heavy metas."
+}

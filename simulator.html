@@ -1,0 +1,686 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dota Draft Simulator</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:      #0d1117;
+      --surface: #161b22;
+      --surface2: #21262d;
+      --border:  #30363d;
+      --text:    #e6edf3;
+      --muted:   #8b949e;
+      --radiant: #5cb85c;
+      --dire:    #d9534f;
+      --accent:  #f0a500;
+      --good:    #3fb950;
+      --bad:     #f85149;
+    }
+
+    body {
+      font-family: 'Inter', system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      font-size: 13px;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* ── Header ── */
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 16px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+      gap: 12px;
+    }
+    .header-title { font-weight: 700; font-size: 14px; display: flex; align-items: center; gap: 8px; }
+    .header-actions { display: flex; align-items: center; gap: 8px; }
+    .btn {
+      padding: 4px 12px;
+      border-radius: 4px;
+      border: 1px solid var(--border);
+      background: transparent;
+      color: var(--muted);
+      font-size: 12px;
+      cursor: pointer;
+      font-family: inherit;
+      transition: all 0.1s;
+    }
+    .btn:hover { border-color: var(--text); color: var(--text); }
+    .btn-danger { border-color: var(--bad); color: var(--bad); }
+    .btn-danger:hover { background: rgba(248,81,73,0.1); }
+    .my-team-toggle {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+      color: var(--muted);
+    }
+    .my-team-toggle select {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 3px 6px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-family: inherit;
+      cursor: pointer;
+    }
+
+    /* ── Draft Board ── */
+    .draft-board {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0;
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+      background: var(--surface);
+    }
+    .team-col {
+      padding: 10px 14px;
+      border-right: 1px solid var(--border);
+    }
+    .team-col:last-child { border-right: none; }
+    .team-label {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      margin-bottom: 8px;
+    }
+    .team-label.radiant { color: var(--radiant); }
+    .team-label.dire    { color: var(--dire); }
+    .you-badge {
+      display: inline-block;
+      font-size: 9px;
+      padding: 1px 5px;
+      border-radius: 3px;
+      background: var(--accent);
+      color: #000;
+      margin-left: 6px;
+      font-weight: 700;
+    }
+    .slots-row { display: flex; gap: 5px; align-items: flex-end; margin-bottom: 6px; }
+    .slot-group-label { font-size: 9px; color: var(--muted); margin-bottom: 3px; }
+    .slot {
+      width: 46px;
+      height: 26px;
+      border-radius: 3px;
+      border: 1px dashed var(--border);
+      background: var(--surface2);
+      position: relative;
+      overflow: hidden;
+      cursor: pointer;
+      flex-shrink: 0;
+    }
+    .slot.filled { border-style: solid; border-color: transparent; cursor: default; }
+    .slot.ban-slot { opacity: 0.7; }
+    .slot img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .slot .remove-x {
+      display: none;
+      position: absolute;
+      inset: 0;
+      background: rgba(0,0,0,0.7);
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      cursor: pointer;
+    }
+    .slot.filled:hover .remove-x { display: flex; }
+    .slot.ban-slot.filled { filter: grayscale(50%); }
+    .slot.next-slot { border-color: var(--accent); border-style: solid; animation: pulse 1.2s ease-in-out infinite; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.5} }
+
+    /* ── Mode Selector ── */
+    .mode-bar {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 14px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+      flex-wrap: wrap;
+    }
+    .mode-label { font-size: 11px; color: var(--muted); font-weight: 600; margin-right: 4px; }
+    .mode-btn {
+      padding: 4px 12px;
+      border-radius: 4px;
+      border: 1px solid var(--border);
+      background: transparent;
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 500;
+      cursor: pointer;
+      font-family: inherit;
+      transition: all 0.12s;
+    }
+    .mode-btn.active-radiant-pick  { background: rgba(92,184,92,0.15);  border-color: var(--radiant); color: var(--radiant); }
+    .mode-btn.active-radiant-ban   { background: rgba(92,184,92,0.08);  border-color: var(--radiant); color: var(--radiant); opacity: 0.8; }
+    .mode-btn.active-dire-pick     { background: rgba(217,83,79,0.15);  border-color: var(--dire);    color: var(--dire); }
+    .mode-btn.active-dire-ban      { background: rgba(217,83,79,0.08);  border-color: var(--dire);    color: var(--dire);    opacity: 0.8; }
+    .mode-btn:hover:not([disabled]) { filter: brightness(1.2); }
+    .mode-btn[disabled] { opacity: 0.35; cursor: not-allowed; }
+
+    .search-box {
+      margin-left: auto;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .search-input {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      color: var(--text);
+      padding: 4px 10px;
+      font-size: 12px;
+      font-family: inherit;
+      width: 160px;
+    }
+    .search-input::placeholder { color: var(--muted); }
+    .role-select {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: 12px;
+      font-family: inherit;
+      cursor: pointer;
+    }
+
+    /* ── Hero Grid ── */
+    .hero-grid-wrap {
+      flex: 1;
+      overflow-y: auto;
+      padding: 10px 14px;
+    }
+    .hero-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(72px, 1fr));
+      gap: 6px;
+    }
+    .hero-card {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 3px;
+      cursor: pointer;
+      border-radius: 4px;
+      padding: 3px;
+      border: 1px solid transparent;
+      transition: all 0.1s;
+      position: relative;
+    }
+    .hero-card:hover:not(.used) { border-color: var(--accent); background: rgba(240,165,0,0.06); }
+    .hero-card.used { opacity: 0.3; cursor: not-allowed; }
+    .hero-card.used-radiant-pick { border-color: var(--radiant); opacity: 0.6; }
+    .hero-card.used-radiant-ban  { border-color: rgba(92,184,92,0.4); opacity: 0.5; }
+    .hero-card.used-dire-pick    { border-color: var(--dire); opacity: 0.6; }
+    .hero-card.used-dire-ban     { border-color: rgba(217,83,79,0.4); opacity: 0.5; }
+    .hero-card img {
+      width: 64px;
+      height: 36px;
+      object-fit: cover;
+      border-radius: 3px;
+      display: block;
+    }
+    .hero-card-name {
+      font-size: 9px;
+      color: var(--muted);
+      text-align: center;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      width: 100%;
+    }
+    .hero-tag {
+      position: absolute;
+      top: 2px;
+      right: 2px;
+      font-size: 8px;
+      font-weight: 700;
+      padding: 1px 3px;
+      border-radius: 2px;
+    }
+    .hero-tag.rp { background: var(--radiant); color: #000; }
+    .hero-tag.rb { background: rgba(92,184,92,0.5); color: #000; }
+    .hero-tag.dp { background: var(--dire); color: #fff; }
+    .hero-tag.db { background: rgba(217,83,79,0.5); color: #fff; }
+
+    /* ── Status bar ── */
+    .status-bar {
+      padding: 5px 14px;
+      background: var(--surface);
+      border-top: 1px solid var(--border);
+      font-size: 11px;
+      color: var(--muted);
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-shrink: 0;
+    }
+    .status-dot {
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: var(--bad);
+      display: inline-block;
+    }
+    .status-dot.ok { background: var(--good); }
+
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: var(--bg); }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  </style>
+</head>
+<body>
+
+<!-- Header -->
+<div class="header">
+  <div class="header-title">⚔️ Draft Simulator</div>
+  <div class="header-actions">
+    <div class="my-team-toggle">
+      <span>I am</span>
+      <select id="myTeamSelect" onchange="setMyTeam(this.value)">
+        <option value="radiant">Radiant</option>
+        <option value="dire">Dire</option>
+      </select>
+    </div>
+    <button class="btn" onclick="undoLast()">↩ Undo</button>
+    <button class="btn btn-danger" onclick="resetDraft()">Reset</button>
+    <a href="/" target="_blank" style="text-decoration:none">
+      <button class="btn">Open Draft Helper →</button>
+    </a>
+  </div>
+</div>
+
+<!-- Draft Board -->
+<div class="draft-board">
+  <div class="team-col">
+    <div class="team-label radiant" id="radiantLabel">Radiant <span class="you-badge">YOU</span></div>
+    <div class="slot-group-label">Picks</div>
+    <div class="slots-row" id="radiantPicks"></div>
+    <div class="slot-group-label">Bans</div>
+    <div class="slots-row" id="radiantBans"></div>
+  </div>
+  <div class="team-col">
+    <div class="team-label dire" id="direLabel">Dire</div>
+    <div class="slot-group-label">Picks</div>
+    <div class="slots-row" id="direPicks"></div>
+    <div class="slot-group-label">Bans</div>
+    <div class="slots-row" id="direBans"></div>
+  </div>
+</div>
+
+<!-- Mode bar -->
+<div class="mode-bar">
+  <span class="mode-label">Mode</span>
+  <button class="mode-btn" id="btn-radiant-pick" onclick="setMode('radiant-pick')">🟢 Radiant Pick</button>
+  <button class="mode-btn" id="btn-radiant-ban"  onclick="setMode('radiant-ban')">🚫 Radiant Ban</button>
+  <button class="mode-btn" id="btn-dire-pick"    onclick="setMode('dire-pick')">🔴 Dire Pick</button>
+  <button class="mode-btn" id="btn-dire-ban"     onclick="setMode('dire-ban')">🚫 Dire Ban</button>
+  <div class="search-box">
+    <select class="role-select" id="roleSelect" onchange="renderGrid()">
+      <option value="">All roles</option>
+      <option>Carry</option><option>Support</option><option>Nuker</option>
+      <option>Disabler</option><option>Durable</option><option>Escape</option>
+      <option>Pusher</option><option>Initiator</option>
+    </select>
+    <input class="search-input" id="searchInput" placeholder="Search hero…" oninput="renderGrid()" />
+  </div>
+</div>
+
+<!-- Hero Grid -->
+<div class="hero-grid-wrap">
+  <div class="hero-grid" id="heroGrid">
+    <div style="color:var(--muted);padding:20px">Loading heroes…</div>
+  </div>
+</div>
+
+<!-- Status bar -->
+<div class="status-bar">
+  <span class="status-dot" id="backendDot"></span>
+  <span id="backendStatus">Connecting to backend…</span>
+  <span>·</span>
+  <span id="actionHint" style="color:var(--accent)">Select a mode above, then click a hero</span>
+</div>
+
+<script>
+// ── State ─────────────────────────────────────────────────────────────────────
+const MAX_PICKS = 5;
+const MAX_BANS  = 7;
+
+let allHeroes  = [];
+let myTeam     = 'radiant';
+let mode       = 'radiant-pick';
+let history    = [];   // for undo
+
+let draft = {
+  radiant: { picks: [], bans: [] },
+  dire:    { picks: [], bans: [] },
+};
+
+// hero lookup by id
+let heroById = {};
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+async function init() {
+  await loadHeroes();
+  setMode('radiant-pick');
+  renderAll();
+  checkBackend();
+  setInterval(checkBackend, 10000);
+}
+
+async function loadHeroes() {
+  try {
+    const resp = await fetch('/api/heroes');
+    allHeroes  = await resp.json();
+    heroById   = {};
+    for (const h of allHeroes) heroById[h.id] = h;
+    renderGrid();
+  } catch (e) {
+    document.getElementById('heroGrid').innerHTML =
+      '<div style="color:var(--bad);padding:20px">Could not load heroes — is the backend running?</div>';
+  }
+}
+
+async function checkBackend() {
+  try {
+    await fetch('/api/status');
+    document.getElementById('backendDot').classList.add('ok');
+    document.getElementById('backendStatus').textContent = 'Backend connected';
+  } catch {
+    document.getElementById('backendDot').classList.remove('ok');
+    document.getElementById('backendStatus').textContent = 'Backend offline — start run.bat';
+  }
+}
+
+// ── Mode ──────────────────────────────────────────────────────────────────────
+function setMode(m) {
+  mode = m;
+  document.querySelectorAll('.mode-btn').forEach(b => b.className = 'mode-btn');
+  document.getElementById('btn-' + m).classList.add('active-' + m);
+
+  const hints = {
+    'radiant-pick': '🟢 Click a hero to pick for Radiant',
+    'radiant-ban':  '🚫 Click a hero to ban for Radiant',
+    'dire-pick':    '🔴 Click a hero to pick for Dire',
+    'dire-ban':     '🚫 Click a hero to ban for Dire',
+  };
+  document.getElementById('actionHint').textContent = hints[m];
+  renderBoard();
+}
+
+function setMyTeam(team) {
+  myTeam = team;
+  document.getElementById('radiantLabel').innerHTML =
+    'Radiant' + (team === 'radiant' ? ' <span class="you-badge">YOU</span>' : '');
+  document.getElementById('direLabel').innerHTML =
+    'Dire' + (team === 'dire' ? ' <span class="you-badge">YOU</span>' : '');
+  postGSI();
+}
+
+// ── Draft actions ─────────────────────────────────────────────────────────────
+function usedHeroIds() {
+  return new Set([
+    ...draft.radiant.picks.map(h => h.id),
+    ...draft.radiant.bans.map(h => h.id),
+    ...draft.dire.picks.map(h => h.id),
+    ...draft.dire.bans.map(h => h.id),
+  ]);
+}
+
+function heroUsage(heroId) {
+  if (draft.radiant.picks.some(h => h.id === heroId)) return 'rp';
+  if (draft.radiant.bans.some(h => h.id === heroId))  return 'rb';
+  if (draft.dire.picks.some(h => h.id === heroId))    return 'dp';
+  if (draft.dire.bans.some(h => h.id === heroId))     return 'db';
+  return null;
+}
+
+function clickHero(heroId) {
+  const hero   = heroById[heroId];
+  if (!hero) return;
+
+  const usage = heroUsage(heroId);
+  if (usage) {
+    removeHero(heroId, usage);
+    return;
+  }
+
+  const [team, action] = mode.split('-');
+  const list = draft[team][action + 's'];
+  const max  = action === 'pick' ? MAX_PICKS : MAX_BANS;
+
+  if (list.length >= max) {
+    flashHint(`${team} ${action} slots are full!`);
+    return;
+  }
+
+  const slot = { id: hero.id, name: hero.name };
+  list.push(slot);
+  history.push({ team, action, heroId: hero.id });
+  renderAll();
+  postGSI();
+}
+
+function removeHero(heroId, usage) {
+  const teamMap = { r: 'radiant', d: 'dire' };
+  const actMap  = { p: 'picks',   b: 'bans' };
+  const team = teamMap[usage[0]];
+  const list = draft[team][actMap[usage[1]]];
+  const idx  = list.findIndex(h => h.id === heroId);
+  if (idx !== -1) {
+    list.splice(idx, 1);
+    history = history.filter(e => e.heroId !== heroId);
+    renderAll();
+    postGSI();
+  }
+}
+
+function undoLast() {
+  if (!history.length) return;
+  const last = history.pop();
+  const list = draft[last.team][last.action + 's'];
+  const idx  = list.findLastIndex(h => h.id === last.heroId);
+  if (idx !== -1) list.splice(idx, 1);
+  renderAll();
+  postGSI();
+}
+
+function resetDraft() {
+  draft = { radiant: { picks:[], bans:[] }, dire: { picks:[], bans:[] } };
+  history = [];
+  renderAll();
+  postGSI();
+}
+
+function flashHint(msg) {
+  const el = document.getElementById('actionHint');
+  const prev = el.textContent;
+  el.style.color = 'var(--bad)';
+  el.textContent = msg;
+  setTimeout(() => { el.style.color = 'var(--accent)'; el.textContent = prev; }, 1500);
+}
+
+// ── Render ────────────────────────────────────────────────────────────────────
+function imgUrl(hero) {
+  const name = (hero.name || '').replace('npc_dota_hero_', '');
+  return `https://cdn.cloudflare.steamstatic.com/apps/dota2/images/dota_react/heroes/${name}.png`;
+}
+
+function renderSlots(containerId, slots, maxSlots, type, team) {
+  const container = document.getElementById(containerId);
+  container.innerHTML = '';
+
+  const isBan      = type === 'ban';
+  const isActive   = mode === `${team}-${type}`;
+  const nextIdx    = slots.length;
+
+  for (let i = 0; i < maxSlots; i++) {
+    const slot = document.createElement('div');
+    slot.className = 'slot' + (isBan ? ' ban-slot' : '');
+
+    if (i < slots.length) {
+      const hero = heroById[slots[i].id];
+      slot.classList.add('filled');
+      if (hero) {
+        const img = document.createElement('img');
+        img.src = imgUrl(hero);
+        img.alt = hero.display_name;
+        img.onerror = () => { img.style.display='none'; };
+        slot.appendChild(img);
+        const x = document.createElement('div');
+        x.className = 'remove-x';
+        x.textContent = '✕';
+        x.title = `Remove ${hero.display_name}`;
+        x.onclick = () => removeHero(hero.id, heroUsage(hero.id));
+        slot.appendChild(x);
+        slot.title = hero.display_name;
+      }
+    } else if (i === nextIdx && isActive) {
+      slot.classList.add('next-slot');
+    }
+
+    container.appendChild(slot);
+  }
+}
+
+function renderBoard() {
+  renderSlots('radiantPicks', draft.radiant.picks, MAX_PICKS, 'pick', 'radiant');
+  renderSlots('radiantBans',  draft.radiant.bans,  MAX_BANS,  'ban',  'radiant');
+  renderSlots('direPicks',    draft.dire.picks,    MAX_PICKS, 'pick', 'dire');
+  renderSlots('direBans',     draft.dire.bans,     MAX_BANS,  'ban',  'dire');
+}
+
+function renderGrid() {
+  const search  = document.getElementById('searchInput').value.toLowerCase();
+  const role    = document.getElementById('roleSelect').value;
+  const used    = usedHeroIds();
+  const grid    = document.getElementById('heroGrid');
+  grid.innerHTML = '';
+
+  const filtered = allHeroes.filter(h => {
+    const name = (h.display_name || '').toLowerCase();
+    if (search && !name.includes(search)) return false;
+    if (role && !(h.roles || []).includes(role)) return false;
+    return true;
+  });
+
+  if (!filtered.length) {
+    grid.innerHTML = '<div style="color:var(--muted);padding:20px">No heroes match</div>';
+    return;
+  }
+
+  for (const hero of filtered) {
+    const usage  = heroUsage(hero.id);
+    const isUsed = !!usage;
+
+    const card = document.createElement('div');
+    card.className = 'hero-card' + (isUsed ? ` used used-${usage === 'rp' ? 'radiant-pick' : usage === 'rb' ? 'radiant-ban' : usage === 'dp' ? 'dire-pick' : 'dire-ban'}` : '');
+    card.title = isUsed
+      ? `${hero.display_name} — click to remove`
+      : hero.display_name;
+    card.onclick = () => clickHero(hero.id);
+
+    const img = document.createElement('img');
+    img.src   = imgUrl(hero);
+    img.alt   = hero.display_name;
+    img.onerror = () => { img.style.background='var(--surface2)'; };
+    card.appendChild(img);
+
+    const name = document.createElement('div');
+    name.className = 'hero-card-name';
+    name.textContent = hero.display_name;
+    card.appendChild(name);
+
+    if (usage) {
+      const tag = document.createElement('div');
+      tag.className = `hero-tag ${usage}`;
+      tag.textContent = usage === 'rp' ? 'R' : usage === 'rb' ? 'B' : usage === 'dp' ? 'D' : 'B';
+      card.appendChild(tag);
+    }
+
+    grid.appendChild(card);
+  }
+}
+
+function renderAll() {
+  renderBoard();
+  renderGrid();
+}
+
+// ── GSI Posting ───────────────────────────────────────────────────────────────
+function buildGSIPayload() {
+  const team2 = { home_team: myTeam === 'radiant' };
+  const team3 = { home_team: myTeam === 'dire' };
+
+  draft.radiant.picks.forEach((h, i) => {
+    team2[`pick${i}_id`]    = h.id;
+    team2[`pick${i}_class`] = h.name.replace('npc_dota_hero_', '');
+  });
+  draft.radiant.bans.forEach((h, i) => {
+    team2[`ban${i}_id`]    = h.id;
+    team2[`ban${i}_class`] = h.name.replace('npc_dota_hero_', '');
+  });
+  draft.dire.picks.forEach((h, i) => {
+    team3[`pick${i}_id`]    = h.id;
+    team3[`pick${i}_class`] = h.name.replace('npc_dota_hero_', '');
+  });
+  draft.dire.bans.forEach((h, i) => {
+    team3[`ban${i}_id`]    = h.id;
+    team3[`ban${i}_class`] = h.name.replace('npc_dota_hero_', '');
+  });
+
+  const hasPicks = draft.radiant.picks.length + draft.dire.picks.length +
+                   draft.radiant.bans.length  + draft.dire.bans.length > 0;
+
+  return {
+    provider: { name: 'Dota 2 Simulator', appid: 570 },
+    map: {
+      game_state: hasPicks
+        ? 'DOTA_GAMERULES_STATE_HERO_SELECTION'
+        : 'DOTA_GAMERULES_STATE_WAIT_FOR_PLAYERS_TO_LOAD'
+    },
+    draft: hasPicks ? {
+      activeteam: 2,
+      activeteam_time_remaining: 30.0,
+      radiant_bonus_time: 130.0,
+      dire_bonus_time: 130.0,
+      team2,
+      team3,
+    } : undefined,
+  };
+}
+
+async function postGSI() {
+  const payload = buildGSIPayload();
+  try {
+    await fetch('/gsi', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+  } catch (e) {
+    console.warn('Could not post to backend:', e);
+  }
+}
+
+// ── Boot ──────────────────────────────────────────────────────────────────────
+init();
+</script>
+</body>
+</html>
